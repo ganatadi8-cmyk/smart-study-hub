@@ -1,0 +1,22 @@
+node_modules/
+.env
+dist/
+build/
+.DS_Store
+*.log
+*log.txt
+
+# Backend specific ignores
+backend/dummy.txt
+backend/uploads/*
+!backend/uploads/.gitkeep
+
+# General ignores
+.vscode/
+.idea/
+frontend/node_modules/
+backend/node_modules/
+firebase-adminsdk*.json
+*.pem
+*.key
+*.crt
