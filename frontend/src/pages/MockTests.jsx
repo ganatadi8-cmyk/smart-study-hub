@@ -1,9 +1,12 @@
+import { apiUrl } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 
 const MockTests = () => {
   const { currentUser } = useAuth();
+  const [error, setError] = useState('');
+  const [submitting, setSubmitting] = useState(false);
   const [tests, setTests] = useState([]);
   const [activeTest, setActiveTest] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -14,13 +17,14 @@ const MockTests = () => {
   useEffect(() => {
     const fetchTests = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/tests');
+        const response = await fetch(apiUrl('/tests'));
+        if (!response.ok) throw new Error('Unable to load tests. Please try again.');
         if (response.ok) {
           const data = await response.json();
           setTests(data);
         }
       } catch (error) {
-        console.error("Error fetching tests", error);
+        setError(error.message);
       } finally {
         setLoading(false);
       }
@@ -47,9 +51,12 @@ const MockTests = () => {
       return;
     }
 
+    if (submitting) return;
+    setSubmitting(true);
+    setError('');
     try {
       const token = await currentUser.getIdToken();
-      const response = await fetch(`http://localhost:5000/api/tests/${activeTest.id}/submit`, {
+      const response = await fetch(apiUrl(`/tests/${activeTest.id}/submit`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -58,13 +65,12 @@ const MockTests = () => {
         body: JSON.stringify({ answers })
       });
 
-      if (response.ok) {
-        const data = await response.json();
-        setResult(data);
-      }
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || 'Unable to submit test.');
+      setResult(data);
     } catch (error) {
-      console.error("Error submitting test", error);
-    }
+      setError(error.message);
+    } finally { setSubmitting(false); }
   };
 
   if (loading) {
@@ -84,6 +90,7 @@ const MockTests = () => {
         <p className="text-gray-400">Evaluate your knowledge and climb the global leaderboards!</p>
       </motion.div>
 
+      {error && <p role="alert" className="mb-6 text-red-300">{error}</p>}
       {!activeTest ? (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {tests.map(test => (
@@ -112,6 +119,7 @@ const MockTests = () => {
         </div>
       ) : result ? (
         <motion.div initial={{ scale: 0.95, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} className="glass p-8 rounded-2xl border border-white/10 text-center">
+          <p className="text-gray-400 mb-4">{result.alreadySubmitted ? 'Showing your saved attempt. No additional points awarded.' : 'Your first submission has been saved. Each test awards points once.'}</p>
           <div className="text-6xl mb-4">🏆</div>
           <h2 className="text-3xl font-bold text-white mb-2">Test Completed!</h2>
           <p className="text-xl text-gray-400 mb-8">You scored <span className="text-green-400 font-bold">{result.score}</span> out of {result.totalPossible}</p>
@@ -165,10 +173,10 @@ const MockTests = () => {
           <div className="mt-8 pt-6 border-t border-white/10 text-right">
             <button 
               onClick={handleSubmit} 
-              disabled={Object.keys(answers).length !== activeTest.questions.length}
+              disabled={submitting || currentUser?.role !== 'Student' || Object.keys(answers).length !== activeTest.questions.length}
               className={`font-bold py-3 px-8 rounded-xl transition-all shadow-lg ${Object.keys(answers).length === activeTest.questions.length ? 'bg-gradient-to-r from-blue-600 to-purple-600 text-white hover:scale-105' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
             >
-              Submit Responses
+              {submitting ? 'Saving…' : currentUser?.role !== 'Student' ? 'Only students can submit tests' : 'Submit Responses'}
             </button>
           </div>
         </div>

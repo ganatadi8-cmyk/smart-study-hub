@@ -1,50 +1,31 @@
-const express = require('express');
-const router = express.Router();
+const router = require('express').Router();
 const { OpenAI } = require('openai');
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
-
-router.post('/chat', async (req, res) => {
+const { verifyToken, requireVerifiedEmail } = require('../middleware/authMiddleware');
+const { aiRateLimit } = require('../middleware/aiRateLimit');
+const validateChat = (req, res, next) => {
+  const messages = req.body?.messages;
+  if (!Array.isArray(messages) || !messages.length || messages.length > 20 ||
+    messages.some(m => !m || !['user', 'assistant'].includes(m.role) || typeof m.content !== 'string' || !m.content.trim() || m.content.length > 4000) ||
+    messages.reduce((n, m) => n + m.content.length, 0) > 16000 || messages.at(-1).role !== 'user') {
+    return res.status(400).json({ error: 'Send up to 20 user/assistant messages, up to 4,000 characters each and 16,000 total, ending with a question.' });
+  }
+  if (!process.env.OPENAI_API_KEY) return res.status(503).json({ error: 'The AI assistant is not configured yet.' });
+  next();
+};
+router.post('/chat', verifyToken, requireVerifiedEmail, validateChat, aiRateLimit, async (req, res) => {
   try {
-    const { messages } = req.body;
-
-    if (!messages || !Array.isArray(messages)) {
-      return res.status(400).json({ error: 'Messages array is required' });
-    }
-
-    // System prompt for the AI Study Assistant
-    const systemMessage = {
-      role: 'system',
-      content: 'You are an expert AI Study Assistant for the "Smart Study Hub" educational platform. Your goal is to help students understand concepts, solve problems, and provide study tips. Be concise, encouraging, and clear in your explanations. Use formatting like bullet points or bold text where appropriate to make information easier to read.'
-    };
-
-    // Prepend the system message to the conversation history
-    const conversation = [systemMessage, ...messages];
-
-    const completion = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: conversation,
+    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY, timeout: 30000, maxRetries: 0 });
+    const completion = await client.chat.completions.create({
+      model: process.env.OPENAI_MODEL || 'gpt-4o-mini',
+      max_completion_tokens: 800,
+      messages: [
+        { role: 'system', content: 'You are the Smart Study Hub study assistant. Explain concepts clearly and concisely. Admit uncertainty. You cannot access the site study materials; do not claim to have read them.' },
+        ...req.body.messages.map(({ role, content }) => ({ role, content }))
+      ]
     });
-
-    res.json({
-      role: 'assistant',
-      content: completion.choices[0].message.content,
-    });
+    res.json({ role: 'assistant', content: completion.choices[0].message.content });
   } catch (error) {
-    console.error('Error with OpenAI API:', error);
-    
-    // Check if it's an OpenAI API error
-    if (error.status === 429) {
-      if (error.error && error.error.code === 'insufficient_quota') {
-        return res.status(429).json({ error: 'OpenAI API Quota Exceeded. Please check your billing details and add credits to your account.' });
-      }
-      return res.status(429).json({ error: 'Too many requests to the AI service. Please try again later.' });
-    }
-    
-    res.status(500).json({ error: 'Failed to generate AI response' });
+    res.status(error.status === 429 ? 429 : 502).json({ error: error.status === 429 ? 'The AI service is temporarily at its usage limit.' : 'The AI service could not respond. Please try again.' });
   }
 });
-
 module.exports = router;

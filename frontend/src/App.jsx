@@ -1,6 +1,6 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 
 import Navbar from './components/Navbar';
 import ProtectedRoute from './components/ProtectedRoute';
@@ -23,12 +23,19 @@ import Leaderboard from './pages/Leaderboard';
 import Discussion from './pages/Discussion';
 import EmailVerification from './pages/EmailVerification';
 
+function AccountNotice() {
+  const { currentUser, authError } = useAuth();
+  if (authError) return <p role="alert" className="p-4 text-center text-red-300">{authError} <button className="underline" onClick={() => window.location.reload()}>Retry</button></p>;
+  if (currentUser && !currentUser.emailVerified) return <p className="p-4 text-center bg-blue-950">Verify your email to upload, rate materials and use AI. <a href="/verify-email" className="underline">Verify email</a></p>;
+  return null;
+}
 function App() {
   return (
     <AuthProvider>
       <Router>
         <div className="min-h-screen bg-primary text-gray-100 font-sans selection:bg-purple-500/30">
           <Navbar />
+          <AccountNotice />
           <main>
             <Routes>
               <Route path="/" element={<Home />} />

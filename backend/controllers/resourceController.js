@@ -1,4 +1,4 @@
-const { db } = require('../config/firebase-admin');
+const { db, storage } = require('../config/firebase-admin');
 
 const getBranches = async (req, res) => {
   try {
@@ -91,6 +91,9 @@ const deleteResource = async (req, res) => {
       return res.status(403).json({ error: 'Not authorized to delete this resource' });
     }
 
+    if (docSnap.data().storagePath) {
+      await storage.bucket().file(docSnap.data().storagePath).delete({ ignoreNotFound: true });
+    }
     await docRef.delete();
     res.json({ message: 'Resource deleted successfully' });
   } catch (error) {
@@ -101,7 +104,7 @@ const deleteResource = async (req, res) => {
 const rateResource = async (req, res) => {
   try {
     const { id } = req.params;
-    const { rating } = req.body;
+    const { rating } = req.body || {};
     
     if (!rating || rating < 1 || rating > 5) {
       return res.status(400).json({ error: 'Invalid rating value' });
@@ -131,47 +134,65 @@ const rateResource = async (req, res) => {
 };
 
 const uploadResource = async (req, res) => {
-  try {
-    const { title, branch, subject, type, description, videoURL } = req.body;
-    const file = req.file;
-
-    if (req.user.role === 'Student') {
-      return res.status(403).json({ error: 'Students are not authorized to upload resources.' });
-    }
-
-    if (!file && !(type === 'Video' && videoURL)) {
-      return res.status(400).json({ error: 'Please provide a file or a video link.' });
-    }
-
-    const newResource = {
-      title,
-      branch,
-      subject,
-      type,
-      description,
-      uploadedBy: req.user.uid,
-      rating: 0,
-      ratingCount: 0,
-      createdAt: new Date().toISOString()
-    };
-
-    if (file) {
-      // In a real prod environment we'd push to Firebase Storage here.
-      // For local testing without Google Credentials we save locally via Multer.
-      const fileUrl = `${req.protocol}://${req.get('host')}/uploads/${file.filename}`;
-      newResource.fileURL = fileUrl;
-      newResource.fileName = file.originalname;
-    } else if (type === 'Video' && videoURL) {
-      newResource.videoURL = videoURL;
-    }
-
-    const docRef = await db.collection('resources').add(newResource);
-    
-    res.status(201).json({ message: 'Resource uploaded successfully', id: docRef.id, resource: newResource });
-  } catch (error) {
-    console.error('Error uploading resource:', error);
-    res.status(500).json({ error: 'Failed to upload resource. ' + error.message });
+  const { title, branch, subject, type, description = '', videoURL } = req.body || {};
+  const validBranches = ['CSE', 'IT', 'ECE', 'EEE', 'MECH', 'CIVIL', 'AI', 'AERO', 'CHEM'];
+  const validTypes = ['Notes', 'PPT', 'Video', 'Previous Paper'];
+  if (![title, subject].every(v => typeof v === 'string' && v.trim() && v.length <= 200) ||
+      !validBranches.includes(branch) || !validTypes.includes(type) || typeof description !== 'string' || description.length > 5000) {
+    return res.status(400).json({ error: 'Provide a title, subject, valid branch and resource type. Description must be at most 5,000 characters.' });
   }
+  let video;
+  let detected;
+  if (type === 'Video') {
+    try { video = new URL(videoURL); } catch { return res.status(400).json({ error: 'Provide a valid HTTPS video URL.' }); }
+    if (video.protocol !== 'https:' || video.username || video.password || req.file) return res.status(400).json({ error: 'Videos require an HTTPS link and no file.' });
+  } else {
+    try {
+      const { fileTypeFromBuffer } = await import('file-type');
+      detected = req.file && await fileTypeFromBuffer(req.file.buffer);
+    } catch { detected = null; }
+    const extension = req.file?.originalname.split('.').pop().toLowerCase();
+    if (!detected || !['pdf', 'docx', 'pptx'].includes(detected.ext) || detected.ext !== extension) {
+      return res.status(400).json({ error: 'Upload a valid PDF, DOCX or PPTX file (maximum 10 MB). File contents must match the extension.' });
+    }
+  }
+  const docRef = db.collection('resources').doc();
+  let storedFile;
+  try {
+    const resource = { title: title.trim(), branch, subject: subject.trim(), type, description, uploadedBy: req.user.uid,
+      rating: 0, ratingCount: 0, createdAt: new Date().toISOString() };
+    if (video) resource.videoURL = video.href;
+    else {
+      const storagePath = `resources/${docRef.id}.${detected.ext}`;
+      storedFile = storage.bucket().file(storagePath);
+      await storedFile.save(req.file.buffer, { resumable: false, contentType: detected.mime, metadata: { contentDisposition: 'attachment' } });
+      resource.storagePath = storagePath;
+      resource.mimeType = detected.mime;
+      resource.fileName = req.file.originalname.replace(/[^a-zA-Z0-9._ -]/g, '_').slice(0, 150);
+      resource.fileURL = `${process.env.PUBLIC_API_URL.replace(/\/$/, '')}/resources/${docRef.id}/file`;
+    }
+    await docRef.set(resource);
+    res.status(201).json({ message: 'Resource uploaded.', id: docRef.id, resource });
+  } catch (error) {
+    if (storedFile) await storedFile.delete({ ignoreNotFound: true }).catch(() => {});
+    console.error('Upload failed:', error.message);
+    res.status(503).json({ error: 'Unable to save the resource. Please try again.' });
+  }
+};
+const downloadResource = async (req, res) => {
+  try {
+    const snap = await db.collection('resources').doc(req.params.id).get();
+    if (!snap.exists || !snap.data().storagePath) return res.status(404).json({ error: 'File not found.' });
+    const data = snap.data();
+    res.attachment(data.fileName || 'study-material.pdf');
+    res.set('Content-Type', data.mimeType || 'application/octet-stream');
+    res.set('X-Content-Type-Options', 'nosniff');
+    res.set('Content-Security-Policy', "sandbox; default-src 'none'");
+    storage.bucket().file(data.storagePath).createReadStream().on('error', () => {
+      if (!res.headersSent) res.status(503).json({ error: 'Unable to download this file.' });
+      else res.destroy();
+    }).pipe(res);
+  } catch { res.status(503).json({ error: 'Unable to download this file.' }); }
 };
 
 const getRecommendedResources = async (req, res) => {
@@ -216,5 +237,6 @@ module.exports = {
   deleteResource,
   rateResource,
   uploadResource,
+  downloadResource,
   getRecommendedResources
 };

@@ -1,42 +1,30 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-require('dotenv').config();
-
+const { db } = require('./config/firebase-admin');
 const app = express();
-const PORT = process.env.PORT || 5000;
-
-// Middleware
-app.use((req, res, next) => {
-  console.log(`${req.method} ${req.url}`);
-  next();
+const origins = (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',').map(value => value.trim());
+if (!process.env.PUBLIC_API_URL || !process.env.FIREBASE_STORAGE_BUCKET) throw new Error('PUBLIC_API_URL and FIREBASE_STORAGE_BUCKET are required. See backend/.env.example.');
+app.disable('x-powered-by');
+app.use(cors({ origin: origins }));
+app.use(express.json({ limit: '64kb' }));
+app.use((req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); next(); });
+app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
+app.get('/api/ready', async (req, res) => {
+  try { await db.collection('health').doc('readiness').get(); res.json({ status: 'ready' }); }
+  catch { res.status(503).json({ status: 'unavailable' }); }
 });
-app.use(cors());
-app.use(express.json());
-app.use('/uploads', express.static('uploads'));
-
-// API Root
-app.get('/', (req, res) => {
-  res.send('Smart Study Hub API is running. Access the frontend at http://localhost:5173');
+app.use('/api/resources', require('./routes/resources'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/tests', require('./routes/tests'));
+app.use('/api/discussions', require('./routes/discussions'));
+app.use('/api/ai', require('./routes/ai'));
+app.use((req, res) => res.status(404).json({ error: 'Route not found.' }));
+app.use((error, req, res, next) => {
+  if (res.headersSent) return next(error);
+  const uploadError = typeof error.code === 'string' && error.code.startsWith('LIMIT_');
+  const status = uploadError ? (error.code === 'LIMIT_FILE_SIZE' ? 413 : 400) : error.status || 500;
+  res.status(status).json({ error: uploadError ? 'Upload exceeds allowed size or field count. Maximum one PDF, DOCX or PPTX file, 10 MB.' : status < 500 ? error.message : 'An unexpected server error occurred.' });
 });
-
-// Basic health check
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'Smart Study Hub API is running' });
-});
-
-// Import Routes
-const resourceRoutes = require('./routes/resources');
-const userRoutes = require('./routes/users');
-const testRoutes = require('./routes/tests');
-const discussionRoutes = require('./routes/discussions');
-const aiRoutes = require('./routes/ai');
-
-app.use('/api/resources', resourceRoutes);
-app.use('/api/users', userRoutes);
-app.use('/api/tests', testRoutes);
-app.use('/api/discussions', discussionRoutes);
-app.use('/api/ai', aiRoutes);
-
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+if (require.main === module) app.listen(process.env.PORT || 5000, () => console.log('Smart Study Hub API started.'));
+module.exports = app;

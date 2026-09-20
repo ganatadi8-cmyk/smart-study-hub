@@ -1,8 +1,11 @@
+import { useAuth } from '../context/AuthContext';
+import { apiUrl } from '../services/api';
 import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FaRobot, FaTimes, FaPaperPlane, FaSpinner } from 'react-icons/fa';
 
 const AiChatWidget = () => {
+  const { currentUser } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState([
     { role: 'assistant', content: 'Hi there! I am your AI Study Assistant. How can I help you today?' }
@@ -21,7 +24,7 @@ const AiChatWidget = () => {
 
   const handleSendMessage = async (e) => {
     e.preventDefault();
-    if (!inputMessage.trim() || isLoading) return;
+    if (!currentUser?.emailVerified || !inputMessage.trim() || isLoading) return;
 
     const userMessage = { role: 'user', content: inputMessage.trim() };
     const newMessages = [...messages, userMessage];
@@ -31,15 +34,21 @@ const AiChatWidget = () => {
     setIsLoading(true);
 
     try {
-      // Send messages (excluding the initial hardcoded greeting if you prefer, 
-      // but sending it is fine or we just send the history)
-      // Actually we just send the history of messages
-      const apiMessages = newMessages.map(({ role, content }) => ({ role, content }));
+      const token = await currentUser.getIdToken();
+      const apiMessages = [];
+      let characters = 0;
+      for (const message of [...newMessages].reverse()) {
+        if (apiMessages.length >= 20 || characters + message.content.length > 16000) break;
+        if (message.content.length > 4000) break;
+        apiMessages.unshift({ role: message.role, content: message.content });
+        characters += message.content.length;
+      }
 
-      const response = await fetch('http://localhost:5000/api/ai/chat', {
+      const response = await fetch(apiUrl('/ai/chat'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({ messages: apiMessages }),
       });
@@ -127,13 +136,14 @@ const AiChatWidget = () => {
                 type="text"
                 value={inputMessage}
                 onChange={(e) => setInputMessage(e.target.value)}
-                placeholder="Ask a study question..."
+                placeholder={!currentUser ? 'Sign in to use the assistant' : !currentUser.emailVerified ? 'Verify your email first' : 'Ask a study question...'}
+                maxLength={4000}
                 className="flex-1 bg-gray-100 text-gray-800 rounded-full px-4 py-2 focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
-                disabled={isLoading}
+                disabled={isLoading || !currentUser?.emailVerified}
               />
               <button
                 type="submit"
-                disabled={isLoading || !inputMessage.trim()}
+                disabled={isLoading || !currentUser?.emailVerified || !inputMessage.trim()}
                 className="p-2 rounded-full bg-purple-600 text-white hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
                 <FaPaperPlane size={14} />

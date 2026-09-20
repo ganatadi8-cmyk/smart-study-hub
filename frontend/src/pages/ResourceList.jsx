@@ -1,3 +1,4 @@
+import { apiUrl } from '../services/api';
 import React, { useState, useEffect } from 'react'; // Forced Cache Invalidation
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -19,7 +20,7 @@ const Resources = () => {
     const fetchResources = async () => {
       setLoading(true);
       try {
-        const url = new URL('http://localhost:5000/api/resources');
+        const url = new URL(apiUrl('/resources'));
         url.searchParams.append('branch', branchId.toUpperCase());
         url.searchParams.append('type', typeId);
         

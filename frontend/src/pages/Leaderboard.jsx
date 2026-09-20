@@ -1,3 +1,4 @@
+import { apiUrl } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
@@ -11,7 +12,7 @@ const Leaderboard = () => {
     const fetchLeaderboard = async () => {
       try {
         const token = await currentUser.getIdToken();
-        const response = await fetch('http://localhost:5000/api/users/leaderboard', {
+        const response = await fetch(apiUrl('/users/leaderboard'), {
           headers: {
             'Authorization': `Bearer ${token}`
           }

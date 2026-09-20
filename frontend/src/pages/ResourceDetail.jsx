@@ -1,3 +1,4 @@
+import { apiUrl } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import RatingStars from '../components/RatingStars';
@@ -18,7 +19,7 @@ const ResourceDetail = () => {
   useEffect(() => {
     const fetchResource = async () => {
       try {
-        const response = await fetch(`http://localhost:5000/api/resources/${id}`);
+        const response = await fetch(apiUrl(`/resources/${id}`));
         if (!response.ok) {
           if (response.status === 404) {
             console.error("No such document!");
@@ -49,7 +50,7 @@ const ResourceDetail = () => {
 
     try {
       const token = await currentUser.getIdToken();
-      const response = await fetch(`http://localhost:5000/api/resources/${id}/rate`, {
+      const response = await fetch(apiUrl(`/resources/${id}/rate`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -76,7 +77,7 @@ const ResourceDetail = () => {
     if (window.confirm("Are you sure you want to delete this resource globally?")) {
       try {
         const token = await currentUser.getIdToken();
-        const response = await fetch(`http://localhost:5000/api/resources/${id}`, {
+        const response = await fetch(apiUrl(`/resources/${id}`), {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
