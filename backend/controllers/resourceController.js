@@ -1,3 +1,4 @@
+const { MAX_FILE_MB } = require('../middleware/uploads');
 const { db, storage } = require('../config/firebase-admin');
 
 const getBranches = async (req, res) => {
@@ -153,7 +154,7 @@ const uploadResource = async (req, res) => {
     } catch { detected = null; }
     const extension = req.file?.originalname.split('.').pop().toLowerCase();
     if (!detected || !['pdf', 'docx', 'pptx'].includes(detected.ext) || detected.ext !== extension) {
-      return res.status(400).json({ error: 'Upload a valid PDF, DOCX or PPTX file (maximum 10 MB). File contents must match the extension.' });
+      return res.status(400).json({ error: `Upload a valid PDF, DOCX or PPTX file (maximum ${MAX_FILE_MB} MB). File contents must match the extension.` });
     }
   }
   const docRef = db.collection('resources').doc();

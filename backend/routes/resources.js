@@ -1,7 +1,8 @@
 const router = require('express').Router();
 const { verifyToken, requireRoles, requireVerifiedEmail } = require('../middleware/authMiddleware');
-const { upload } = require('../middleware/uploads');
+const { upload, MAX_FILE_SIZE, MAX_FILE_MB } = require('../middleware/uploads');
 const { getBranches, getAllResources, getResourceById, deleteResource, rateResource, uploadResource, getRecommendedResources, downloadResource } = require('../controllers/resourceController');
+router.get('/upload-config', (req, res) => res.json({ maxFileBytes: MAX_FILE_SIZE, maxFileMB: MAX_FILE_MB, extensions: ['pdf', 'docx', 'pptx'] }));
 router.get('/branches', getBranches);
 router.get('/recommended', getRecommendedResources);
 router.get('/', getAllResources);

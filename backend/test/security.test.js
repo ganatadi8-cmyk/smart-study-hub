@@ -234,3 +234,27 @@ test('missing Firebase configuration and production emulator mode fail at startu
   assert.notEqual(forbidden.status, 0);
   assert.match(forbidden.stderr, /Emulators are forbidden/);
 });
+
+test('upload settings match the backend file-size limit', async () => {
+  const response = await request('/resources/upload-config');
+  assert.equal(response.status, 200);
+  const settings = await response.json();
+  assert.equal(settings.maxFileBytes, require('../middleware/uploads').MAX_FILE_SIZE);
+  assert.deepEqual(settings.extensions, ['pdf', 'docx', 'pptx']);
+});
+test('Vercel runtime caps multipart uploads below the platform payload limit', () => {
+  const result = spawnSync(process.execPath, ['-e', "console.log(require('./middleware/uploads').MAX_FILE_SIZE)"], {
+    cwd: path.resolve(__dirname, '..'), env: { ...process.env, VERCEL: '1' }, encoding: 'utf8'
+  });
+  assert.equal(result.status, 0);
+  assert.equal(Number(result.stdout.trim()), 4 * 1024 * 1024);
+});
+test('malformed and mismatched deployment credentials fail without exposing their content', () => {
+  for (const secret of ['sensitive-invalid-json', JSON.stringify({ project_id: 'wrong-project', private_key: 'sensitive-private-key', client_email: 'test@example.com' })]) {
+    const env = { ...process.env, FIREBASE_PROJECT_ID: 'expected-project', USE_FIREBASE_EMULATORS: 'false', FIREBASE_SERVICE_ACCOUNT_JSON: secret };
+    for (const key of ['FIREBASE_AUTH_EMULATOR_HOST', 'FIRESTORE_EMULATOR_HOST', 'FIREBASE_STORAGE_EMULATOR_HOST']) delete env[key];
+    const result = spawnSync(process.execPath, ['-e', "require('./config/firebase-admin')"], { cwd: path.resolve(__dirname, '..'), env, encoding: 'utf8' });
+    assert.notEqual(result.status, 0);
+    assert.doesNotMatch(result.stderr, /sensitive-invalid-json|sensitive-private-key/);
+  }
+});

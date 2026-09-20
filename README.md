@@ -78,7 +78,7 @@ The script preserves other custom claims, revokes existing sessions and mirrors 
 
 - Tokens are verified with revocation checking; arbitrary/mock tokens fail. Passwords are handled by Firebase, not local storage.
 - Resources are public to browse/download. Only verified Faculty/Admin accounts can upload. Deletion requires Faculty/Admin plus ownership (or Admin).
-- Documents: PDF, DOCX, PPTX, maximum **10 MB**. Extensions and detected file contents must agree; old DOC/PPT and direct video-file uploads are not accepted. Convert legacy documents to PDF or modern Office format. Videos use HTTPS links.
+- Documents: PDF, DOCX, PPTX, maximum **10 MiB locally / 4 MiB on Vercel**. Extensions and detected file contents must agree; old DOC/PPT and direct video-file uploads are not accepted. Convert legacy documents to PDF or modern Office format. Videos use HTTPS links.
 - Documents persist in Firebase Storage and download as attachments with `nosniff`. Type detection is not malware scanning; add a scanning/quarantine workflow before allowing untrusted file publishers at scale.
 - Test listings omit answers. A Firestore transaction saves the first completed attempt and adds points once. Retrying or concurrently submitting returns the saved result. Only students can submit. A new test ID is required for a new scored attempt.
 - AI requires verified email. Shared Firestore counters cap requests per user and globally per hour, including failed upstream attempts. Defaults: 20/user and 200 globally. Configure `AI_REQUESTS_PER_HOUR` and `AI_GLOBAL_REQUESTS_PER_HOUR`. Windows reset on the hour; counts persist across API instances/restarts. Do not delete rate-limit counters during a live window.
@@ -86,6 +86,8 @@ The script preserves other custom claims, revokes existing sessions and mirrors 
 - Deleting a user removes their Firebase Auth account and profile. Historical discussions, resources and attempts are retained; this is not an erasure/export workflow.
 
 ## Deployment
+
+For hosting both apps on Vercel, follow [DEPLOYMENT.md](DEPLOYMENT.md). It covers the two projects, Firebase secret configuration and end-to-end checks.
 
 Set backend `NODE_ENV=production`, real Firebase credentials and bucket, `PUBLIC_API_URL=https://api.example.com/api`, and `CORS_ORIGINS=https://study.example.com` (comma-separated exact origins). Use HTTPS. CORS is a browser policy, not authentication. Never set emulator host variables in production.
 

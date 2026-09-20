@@ -1,5 +1,5 @@
 import { apiUrl } from '../services/api';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -7,6 +7,16 @@ import { motion } from 'framer-motion';
 const Upload = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const [uploadConfig, setUploadConfig] = useState(null);
+  useEffect(() => {
+    let active = true;
+    fetch(apiUrl('/resources/upload-config')).then(async response => {
+      if (!response.ok) throw new Error('Unable to load upload limits. Refresh to retry.');
+      const config = await response.json();
+      if (active) setUploadConfig(config);
+    }).catch(error => { if (active) setError(error.message); });
+    return () => { active = false; };
+  }, []);
   
   const [formData, setFormData] = useState({
     title: '',
@@ -29,8 +39,8 @@ const Upload = () => {
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     if (!selected) { setFile(null); return; }
-    if (selected.size > 10 * 1024 * 1024 || !/\.(pdf|docx|pptx)$/i.test(selected.name)) {
-      setError('Choose a PDF, DOCX or PPTX file up to 10 MB.'); setFile(null); e.target.value = ''; return;
+    if (!uploadConfig || selected.size > uploadConfig.maxFileBytes || !/\.(pdf|docx|pptx)$/i.test(selected.name)) {
+      setError(uploadConfig ? `Choose a PDF, DOCX or PPTX file up to ${uploadConfig.maxFileMB} MB.` : 'Upload settings are not available yet.'); setFile(null); e.target.value = ''; return;
     }
     setError(''); setFile(selected);
   };
@@ -190,7 +200,7 @@ const Upload = () => {
           </div>
 
           {formData.type !== 'Video' && <div>
-            <label className="block text-gray-300 text-sm font-medium mb-2">Upload File (PDF, PPTX, DOCX; maximum 10 MB)</label>
+            <label className="block text-gray-300 text-sm font-medium mb-2">Upload File (PDF, PPTX, DOCX; maximum {uploadConfig?.maxFileMB ?? '…'} MB)</label>
             <div className="border-2 border-dashed border-white/20 hover:border-blue-500/50 rounded-xl p-8 text-center transition-all bg-white/5 relative">
                 <input 
                   type="file" 
@@ -211,10 +221,10 @@ const Upload = () => {
 
           <button 
             type="submit" 
-            disabled={loading}
+            disabled={loading || !uploadConfig}
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-4 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)] disabled:opacity-50"
           >
-            {loading ? 'Uploading…' : 'Submit Resource'}
+            {loading ? 'Uploading…' : !uploadConfig ? 'Loading upload settings…' : 'Submit Resource'}
           </button>
         </form>
       </motion.div>
