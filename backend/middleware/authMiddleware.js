@@ -1,27 +1,22 @@
 const { auth } = require('../config/firebase-admin');
-
+const roles = new Set(['Student', 'Faculty', 'Admin']);
 const verifyToken = async (req, res, next) => {
+  const match = /^Bearer ([^\s]+)$/.exec(req.headers.authorization || '');
+  if (!match) return res.status(401).json({ error: 'Please sign in.' });
   try {
-    const token = req.headers.authorization?.split('Bearer ')[1];
-    
-    if (!token) {
-      return res.status(401).json({ error: 'No token provided' });
-    }
-
-    if (token.startsWith('mock_token')) {
-      // the token is in the format "mock_token_Role" e.g., "mock_token_Faculty"
-      const role = token.split('_')[2] || 'Student';
-      req.user = { uid: 'mock_uid_123', role };
-      return next();
-    }
-
-    const decodedToken = await auth.verifyIdToken(token);
-    req.user = decodedToken;
+    const token = await auth.verifyIdToken(match[1], true);
+    req.user = { ...token, role: roles.has(token.role) ? token.role : 'Student' };
     next();
-  } catch (error) {
-    console.error('Auth Middleware Error:', error);
-    res.status(403).json({ error: 'Unauthorized route access' });
+  } catch {
+    res.status(401).json({ error: 'Your session is invalid or expired. Please sign in again.' });
   }
 };
-
-module.exports = { verifyToken };
+const requireRoles = (...allowed) => (req, res, next) => {
+  if (!allowed.includes(req.user?.role)) return res.status(403).json({ error: 'You do not have permission for this action.' });
+  next();
+};
+const requireVerifiedEmail = (req, res, next) => {
+  if (!req.user?.email_verified) return res.status(403).json({ error: 'Verify your email before using this feature.' });
+  next();
+};
+module.exports = { verifyToken, requireRoles, requireVerifiedEmail };

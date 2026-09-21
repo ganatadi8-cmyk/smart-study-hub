@@ -1,3 +1,4 @@
+import { apiUrl } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import ResourceCard from '../components/ResourceCard';
 import SearchBar from '../components/SearchBar';
@@ -14,7 +15,7 @@ const Library = () => {
   useEffect(() => {
     const fetchResources = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/resources');
+        const response = await fetch(apiUrl('/resources'));
         if (!response.ok) throw new Error('Failed to fetch resources');
         const data = await response.json();
         setResources(data);

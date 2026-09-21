@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import { apiUrl } from '../services/api';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -6,6 +7,16 @@ import { motion } from 'framer-motion';
 const Upload = () => {
   const { currentUser } = useAuth();
   const navigate = useNavigate();
+  const [uploadConfig, setUploadConfig] = useState(null);
+  useEffect(() => {
+    let active = true;
+    fetch(apiUrl('/resources/upload-config')).then(async response => {
+      if (!response.ok) throw new Error('Unable to load upload limits. Refresh to retry.');
+      const config = await response.json();
+      if (active) setUploadConfig(config);
+    }).catch(error => { if (active) setError(error.message); });
+    return () => { active = false; };
+  }, []);
   
   const [formData, setFormData] = useState({
     title: '',
@@ -16,23 +27,28 @@ const Upload = () => {
     videoURL: ''
   });
   const [file, setFile] = useState(null);
-  const [progress, setProgress] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
   const handleChange = (e) => {
     const { name, value } = e.target;
+    if (name === 'type') setFile(null);
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
   const handleFileChange = (e) => {
-    if (e.target.files[0]) {
-      setFile(e.target.files[0]);
+    const selected = e.target.files[0];
+    if (!selected) { setFile(null); return; }
+    if (!uploadConfig?.fileUploadsEnabled) { setError('Document uploads are unavailable until file storage is enabled.'); setFile(null); e.target.value = ''; return; }
+    if (selected.size > uploadConfig.maxFileBytes || !/\.(pdf|docx|pptx)$/i.test(selected.name)) {
+      setError(uploadConfig ? `Choose a PDF, DOCX or PPTX file up to ${uploadConfig.maxFileMB} MB.` : 'Upload settings are not available yet.'); setFile(null); e.target.value = ''; return;
     }
+    setError(''); setFile(selected);
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!currentUser.emailVerified) return setError('Verify your email from the verification page before uploading.');
     if (!file && !(formData.type === 'Video' && formData.videoURL !== '')) {
       return setError("Please provide a file or a video link.");
     }
@@ -49,17 +65,14 @@ const Upload = () => {
       formDataToSend.append('type', formData.type);
       formDataToSend.append('description', formData.description);
       
-      if (formData.videoURL) {
+      if (formData.type === 'Video' && formData.videoURL) {
         formDataToSend.append('videoURL', formData.videoURL);
       }
-      if (file) {
+      if (formData.type !== 'Video' && file) {
         formDataToSend.append('file', file);
       }
 
-      // We'll fake progress if actual network events aren't captured via fetch easily
-      setProgress(50);
-
-      const response = await fetch('http://localhost:5000/api/resources/upload-resource', {
+      const response = await fetch(apiUrl('/resources/upload-resource'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -72,14 +85,12 @@ const Upload = () => {
         throw new Error(errData.error || 'Network error occurred during upload.');
       }
       
-      setProgress(100);
       setLoading(false);
       navigate(`/resources/${formData.branch.toLowerCase()}/${formData.type}`);
     } catch (err) {
       console.error(err);
       setError("An error occurred: " + err.message);
       setLoading(false);
-      setProgress(0);
     }
   };
 
@@ -126,6 +137,9 @@ const Upload = () => {
                 <option value="EEE">Electrical Engineering (EEE)</option>
                 <option value="MECH">Mechanical Engineering (MECH)</option>
                 <option value="CIVIL">Civil Engineering (CIVIL)</option>
+                <option value="AI">AI & Data Science</option>
+                <option value="AERO">Aerospace Engineering</option>
+                <option value="CHEM">Chemical Engineering</option>
               </select>
             </div>
 
@@ -153,17 +167,18 @@ const Upload = () => {
             >
               <option value="Notes">Notes</option>
               <option value="PPT">PPT Presentation</option>
-              <option value="Video">Video Link/File</option>
+              <option value="Video">Video Link</option>
               <option value="Previous Paper">Previous Exam Paper</option>
             </select>
           </div>
 
           {formData.type === 'Video' && (
              <div>
-               <label className="block text-gray-300 text-sm font-medium mb-2">Video Link (YouTube Optional)</label>
+               <label className="block text-gray-300 text-sm font-medium mb-2">Video Link (HTTPS required)</label>
                <input 
                  type="url" 
                  name="videoURL"
+                 required
                  value={formData.videoURL}
                  onChange={handleChange}
                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all"
@@ -185,14 +200,16 @@ const Upload = () => {
             ></textarea>
           </div>
 
-          <div>
-            <label className="block text-gray-300 text-sm font-medium mb-2">Upload File (PDF, PPT, DOCX)</label>
+          {formData.type !== 'Video' && <div>
+            {uploadConfig && !uploadConfig.fileUploadsEnabled && <p className="text-amber-300 mb-3">Document uploads are unavailable until file storage is enabled. You can share an HTTPS video link instead.</p>}
+            <label className="block text-gray-300 text-sm font-medium mb-2">Upload File (PDF, PPTX, DOCX; maximum {uploadConfig?.maxFileMB ?? '…'} MB)</label>
             <div className="border-2 border-dashed border-white/20 hover:border-blue-500/50 rounded-xl p-8 text-center transition-all bg-white/5 relative">
                 <input 
                   type="file" 
                   onChange={handleFileChange} 
                   className="absolute inset-x-0 inset-y-0 w-full h-full opacity-0 cursor-pointer"
-                  accept=".pdf,.doc,.docx,.ppt,.pptx,.mp4"
+                  accept=".pdf,.docx,.pptx"
+                  disabled={!uploadConfig?.fileUploadsEnabled}
                   required={!(formData.type === 'Video' && formData.videoURL)}
                 />
               <div className="text-gray-400">
@@ -203,20 +220,14 @@ const Upload = () => {
                 )}
               </div>
             </div>
-          </div>
-
-          {progress > 0 && progress < 100 && (
-            <div className="w-full bg-gray-700 rounded-full h-2.5">
-              <div className="bg-blue-600 h-2.5 rounded-full" style={{ width: `${progress}%` }}></div>
-            </div>
-          )}
+          </div>}
 
           <button 
             type="submit" 
-            disabled={loading}
+            disabled={loading || !uploadConfig || (formData.type !== 'Video' && !uploadConfig.fileUploadsEnabled)}
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-4 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)] disabled:opacity-50"
           >
-            {loading ? `Uploading... ${Math.round(progress)}%` : 'Submit Resource'}
+            {loading ? 'Uploading…' : !uploadConfig ? 'Loading upload settings…' : 'Submit Resource'}
           </button>
         </form>
       </motion.div>

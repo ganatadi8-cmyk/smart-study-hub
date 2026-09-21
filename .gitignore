@@ -20,3 +20,13 @@ firebase-adminsdk*.json
 *.pem
 *.key
 *.crt
+
+# Local secrets and emulator exports
+.env.*
+!.env.example
+.firebase-data/
+.firebase/
+*-debug.log
+service-account*.json
+
+.vercel/

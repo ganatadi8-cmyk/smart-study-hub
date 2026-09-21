@@ -1,4 +1,4 @@
-const { db } = require('../config/firebase-admin');
+const { db, auth } = require('../config/firebase-admin');
 
 const getAllUsers = async (req, res) => {
   try {
@@ -37,6 +37,10 @@ const deleteUser = async (req, res) => {
       return res.status(404).json({ error: 'User not found' });
     }
 
+    if (id === req.user.uid) return res.status(400).json({ error: 'You cannot delete your own administrator account.' });
+    try { await auth.deleteUser(id); } catch (error) {
+      if (error.code !== 'auth/user-not-found') throw error;
+    }
     await docRef.delete();
     res.status(200).json({ message: 'User deleted successfully' });
   } catch (error) {
@@ -78,7 +82,25 @@ const getLeaderboard = async (req, res) => {
 };
 
 const getUserProfile = async (req, res) => {
-  res.json({ message: 'User profile accessed', user: req.user });
+  try {
+    const ref = db.collection('users').doc(req.user.uid);
+    const profile = await db.runTransaction(async transaction => {
+      const snapshot = await transaction.get(ref);
+      const existing = snapshot.exists ? snapshot.data() : {};
+      const data = {
+        name: req.user.name || existing.name || 'Student',
+        email: req.user.email || '',
+        role: req.user.role,
+        ...(!snapshot.exists ? { createdAt: new Date().toISOString(), testScore: 0, resourcesUploaded: 0 } : {})
+      };
+      transaction.set(ref, data, { merge: true });
+      return { ...existing, ...data, uid: req.user.uid };
+    });
+    res.json(profile);
+  } catch (error) {
+    console.error('Profile synchronization failed:', error);
+    res.status(503).json({ error: 'Unable to load your profile. Please try again.' });
+  }
 };
 
 module.exports = {

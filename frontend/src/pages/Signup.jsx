@@ -8,7 +8,6 @@ const Signup = () => {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [role, setRole] = useState('Student');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   
@@ -25,8 +24,8 @@ const Signup = () => {
     try {
       setError('');
       setLoading(true);
-      await signup(email, password, name, role);
-      navigate('/dashboard');
+      await signup(email, password, name);
+      navigate('/verify-email');
     } catch (err) {
       setError('Failed to create an account. ' + err.message);
       console.error(err);
@@ -74,7 +73,8 @@ const Signup = () => {
           <div>
             <label className="block text-gray-300 text-sm font-medium mb-1">Password</label>
             <input 
-              type="password" 
+              type="password"
+              minLength={8}
               required
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -85,7 +85,8 @@ const Signup = () => {
           <div>
             <label className="block text-gray-300 text-sm font-medium mb-1">Confirm Password</label>
             <input 
-              type="password" 
+              type="password"
+              minLength={8}
               required
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
@@ -93,18 +94,7 @@ const Signup = () => {
               placeholder="Confirm your password"
             />
           </div>
-          <div>
-            <label className="block text-gray-300 text-sm font-medium mb-1">Account Role</label>
-            <select 
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 rounded-lg px-4 py-3 text-white focus:outline-none focus:ring-2 focus:ring-purple-500/50 focus:border-transparent transition-all appearance-none [&>option]:bg-gray-900"
-            >
-              <option value="Student">Student</option>
-              <option value="Faculty">Faculty</option>
-              <option value="Admin">Admin</option>
-            </select>
-          </div>
+          <p className="text-sm text-gray-400">New accounts are students. Faculty access is assigned by an administrator.</p>
           
           <button 
             disabled={loading}

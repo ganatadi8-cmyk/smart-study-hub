@@ -1,3 +1,4 @@
+import { apiUrl } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import ResourceCard from '../components/ResourceCard';
@@ -13,7 +14,7 @@ const FacultyDashboard = () => {
       if (!currentUser) return;
       
       try {
-        const response = await fetch('http://localhost:5000/api/resources');
+        const response = await fetch(apiUrl('/resources'));
         if (!response.ok) throw new Error('Failed to fetch resources');
         const allData = await response.json();
         const data = allData.filter(res => res.uploadedBy === currentUser.uid);
@@ -33,7 +34,7 @@ const FacultyDashboard = () => {
     if (window.confirm("Are you sure you want to delete this resource?")) {
       try {
         const token = await currentUser.getIdToken();
-        const response = await fetch(`http://localhost:5000/api/resources/${id}`, {
+        const response = await fetch(apiUrl(`/resources/${id}`), {
           method: 'DELETE',
           headers: {
             'Authorization': `Bearer ${token}`

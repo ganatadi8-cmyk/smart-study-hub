@@ -13,7 +13,7 @@
 
 @layer base {
   body {
-    background-image: linear-gradient(rgba(10, 25, 47, 0.9), rgba(10, 25, 47, 0.9)), url('/images/study-hub-bg.png');
+    background-image: linear-gradient(rgba(10, 25, 47, 0.9), rgba(10, 25, 47, 0.9)), url('./assets/hero.png');
     background-size: cover;
     background-position: center;
     background-attachment: fixed;
@@ -27,7 +27,7 @@
   }
 
   body.verification-success {
-    background-image: linear-gradient(rgba(0, 20, 18, 0.9), rgba(0, 20, 18, 0.9)), url('/images/study-hub-bg.png');
+    background-image: linear-gradient(rgba(0, 20, 18, 0.9), rgba(0, 20, 18, 0.9)), url('./assets/hero.png');
   }
 
   body.verification-error {

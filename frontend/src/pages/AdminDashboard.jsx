@@ -1,3 +1,4 @@
+import { apiUrl } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
@@ -14,8 +15,8 @@ const AdminDashboard = () => {
         const token = await currentUser.getIdToken();
         const headers = { 'Authorization': `Bearer ${token}` };
 
-        const usersRes = await fetch('http://localhost:5000/api/users', { headers });
-        const resRes = await fetch('http://localhost:5000/api/resources'); // Public read but deleted privately
+        const usersRes = await fetch(apiUrl('/users'), { headers });
+        const resRes = await fetch(apiUrl('/resources')); // Public read but deleted privately
 
         if (usersRes.ok) {
           setUsers(await usersRes.json());
@@ -37,7 +38,7 @@ const AdminDashboard = () => {
     if (window.confirm("Are you sure you want to permanently delete this user?")) {
       try {
         const token = await currentUser.getIdToken();
-        const response = await fetch(`http://localhost:5000/api/users/${id}`, {
+        const response = await fetch(apiUrl(`/users/${id}`), {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
@@ -56,7 +57,7 @@ const AdminDashboard = () => {
     if (window.confirm("Are you sure you want to delete this resource globally?")) {
       try {
         const token = await currentUser.getIdToken();
-        const response = await fetch(`http://localhost:5000/api/resources/${id}`, {
+        const response = await fetch(apiUrl(`/resources/${id}`), {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });

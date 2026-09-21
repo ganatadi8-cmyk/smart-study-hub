@@ -1,80 +1,67 @@
 /* eslint-disable react-refresh/only-export-components */
-import React, { createContext, useContext, useState } from 'react';
-
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onIdTokenChanged, updateProfile, sendEmailVerification } from 'firebase/auth';
+import { auth } from '../services/firebase';
+import { loadProfile } from '../services/api';
 const AuthContext = createContext();
-
-export const useAuth = () => {
-  return useContext(AuthContext);
-};
-
+export const useAuth = () => useContext(AuthContext);
 export const AuthProvider = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState(() => {
-    const savedUser = localStorage.getItem('mock_user');
-    if (savedUser) {
-      const user = JSON.parse(savedUser);
-      user.getIdToken = async () => `mock_token_${user.role}`;
-      return user;
+  const [currentUser, setCurrentUser] = useState(null);
+  const [loading, setLoading] = useState(Boolean(auth));
+  const [authError, setAuthError] = useState('');
+  const version = useRef(0);
+  const synchronize = async user => {
+    const request = ++version.current;
+    setLoading(true);
+    try {
+      const profile = user ? await loadProfile(user) : null;
+      if (request === version.current) {
+        setCurrentUser(user ? { ...profile, emailVerified: user.emailVerified, getIdToken: force => user.getIdToken(force) } : null);
+        setAuthError('');
+      }
+    } catch (error) {
+      if (request === version.current) { setCurrentUser(null); setAuthError(error.message); }
+      throw error;
+    } finally {
+      if (request === version.current) setLoading(false);
     }
-    return null;
-  });
-
-  const signup = async (email, password, name, role) => {
-    // Mock user signup
-    const mockUser = {
-      uid: 'mock_uid_' + Date.now(),
-      email,
-      name,
-      role: role || 'Student',
-      getIdToken: async () => `mock_token_${role || 'Student'}`
-    };
-    
-    localStorage.setItem('mock_user', JSON.stringify(mockUser));
-    setCurrentUser(mockUser);
-    return { user: mockUser };
   };
-
-  // eslint-disable-next-line no-unused-vars
+  useEffect(() => {
+    if (!auth) return;
+    const unsubscribe = onIdTokenChanged(auth, user => { synchronize(user).catch(() => {}); });
+    const invalidate = () => { version.current += 1; };
+    return () => { invalidate(); unsubscribe(); };
+  }, []);
+  const checkConfiguration = () => {
+    if (!auth) throw new Error('Sign-in is not configured. Please contact the site administrator.');
+  };
+  const signup = async (email, password, name) => {
+    checkConfiguration();
+    const result = await createUserWithEmailAndPassword(auth, email, password);
+    await updateProfile(result.user, { displayName: name.trim() });
+    await result.user.getIdToken(true);
+    await synchronize(result.user);
+    return result;
+  };
   const login = async (email, password) => {
-    // Mock user login
-    const savedUser = localStorage.getItem('mock_user');
-    if (savedUser) {
-      const user = JSON.parse(savedUser);
-      // Re-attach the async token function which gets lost in JSON stringify
-      user.getIdToken = async () => `mock_token_${user.role}`;
-      setCurrentUser(user);
-      return { user };
-    }
-    
-    // Fallback if logging in without signing up first in mock mode
-    const mockUser = {
-      uid: 'mock_uid_123',
-      email,
-      name: 'Test Student',
-      role: 'Student',
-      getIdToken: async () => 'mock_token_Student'
-    };
-    localStorage.setItem('mock_user', JSON.stringify(mockUser));
-    setCurrentUser(mockUser);
-    return { user: mockUser };
+    checkConfiguration();
+    const result = await signInWithEmailAndPassword(auth, email, password);
+    await synchronize(result.user);
+    return result;
   };
-
-  const logout = async () => {
-    localStorage.removeItem('mock_user');
-    setCurrentUser(null);
+  const logout = async () => { checkConfiguration(); await signOut(auth); };
+  const sendVerification = async () => {
+    checkConfiguration();
+    if (!auth.currentUser) throw new Error('Please sign in first.');
+    await sendEmailVerification(auth.currentUser);
   };
-
-
-
-  const value = {
-    currentUser,
-    signup,
-    login,
-    logout
+  const refreshVerification = async () => {
+    checkConfiguration();
+    if (!auth.currentUser) throw new Error('Please sign in first.');
+    await auth.currentUser.reload();
+    await auth.currentUser.getIdToken(true);
+    await synchronize(auth.currentUser);
+    return auth.currentUser.emailVerified;
   };
-
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  );
+  return <AuthContext.Provider value={{ currentUser, loading, authError, signup, login, logout, sendVerification, refreshVerification }}>{children}</AuthContext.Provider>;
 };

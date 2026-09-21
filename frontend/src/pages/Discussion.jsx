@@ -1,3 +1,4 @@
+import { apiUrl } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
@@ -11,7 +12,7 @@ const Discussion = () => {
 
   const fetchDiscussions = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/discussions');
+      const response = await fetch(apiUrl('/discussions'));
       if (response.ok) {
         const data = await response.json();
         setDiscussions(data);
@@ -37,7 +38,7 @@ const Discussion = () => {
 
     try {
       const token = await currentUser.getIdToken();
-      const response = await fetch('http://localhost:5000/api/discussions', {
+      const response = await fetch(apiUrl('/discussions'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -65,7 +66,7 @@ const Discussion = () => {
 
     try {
       const token = await currentUser.getIdToken();
-      const response = await fetch(`http://localhost:5000/api/discussions/${discussionId}/reply`, {
+      const response = await fetch(apiUrl(`/discussions/${discussionId}/reply`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

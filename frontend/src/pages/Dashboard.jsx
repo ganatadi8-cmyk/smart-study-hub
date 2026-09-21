@@ -1,3 +1,4 @@
+import { apiUrl } from '../services/api';
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
@@ -12,7 +13,7 @@ const Dashboard = () => {
   useEffect(() => {
     const fetchRecommended = async () => {
       try {
-        const response = await fetch('http://localhost:5000/api/resources/recommended');
+        const response = await fetch(apiUrl('/resources/recommended'));
         if (response.ok) {
           const data = await response.json();
           setRecommended(data);
