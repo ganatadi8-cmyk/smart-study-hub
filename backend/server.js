@@ -5,7 +5,7 @@ const { db } = require('./config/firebase-admin');
 const { MAX_FILE_MB } = require('./middleware/uploads');
 const app = express();
 const origins = (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',').map(value => value.trim());
-if (!process.env.PUBLIC_API_URL || !process.env.FIREBASE_STORAGE_BUCKET) throw new Error('PUBLIC_API_URL and FIREBASE_STORAGE_BUCKET are required. See backend/.env.example.');
+if (!process.env.PUBLIC_API_URL) throw new Error('PUBLIC_API_URL is required. See backend/.env.example.');
 app.disable('x-powered-by');
 app.use(cors({ origin: origins }));
 app.use(express.json({ limit: '64kb' }));

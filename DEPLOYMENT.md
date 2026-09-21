@@ -28,7 +28,7 @@ Import the repo with root directory `backend` and Express framework. Choose the 
 | --- | --- |
 | `NODE_ENV` | `production` |
 | `FIREBASE_PROJECT_ID` | Actual Firebase project ID |
-| `FIREBASE_STORAGE_BUCKET` | Actual Storage bucket name |
+| `FIREBASE_STORAGE_BUCKET` | Optional; set to the actual bucket name only after Storage is provisioned. Without it, document uploads are disabled and HTTPS video links still work. |
 | `FIREBASE_SERVICE_ACCOUNT_JSON` | Complete service-account JSON; sensitive |
 | `PUBLIC_API_URL` | Actual stable backend URL plus `/api` |
 | `CORS_ORIGINS` | Actual stable website origin, no trailing slash |

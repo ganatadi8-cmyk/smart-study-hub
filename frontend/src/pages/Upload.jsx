@@ -39,7 +39,8 @@ const Upload = () => {
   const handleFileChange = (e) => {
     const selected = e.target.files[0];
     if (!selected) { setFile(null); return; }
-    if (!uploadConfig || selected.size > uploadConfig.maxFileBytes || !/\.(pdf|docx|pptx)$/i.test(selected.name)) {
+    if (!uploadConfig?.fileUploadsEnabled) { setError('Document uploads are unavailable until file storage is enabled.'); setFile(null); e.target.value = ''; return; }
+    if (selected.size > uploadConfig.maxFileBytes || !/\.(pdf|docx|pptx)$/i.test(selected.name)) {
       setError(uploadConfig ? `Choose a PDF, DOCX or PPTX file up to ${uploadConfig.maxFileMB} MB.` : 'Upload settings are not available yet.'); setFile(null); e.target.value = ''; return;
     }
     setError(''); setFile(selected);
@@ -200,6 +201,7 @@ const Upload = () => {
           </div>
 
           {formData.type !== 'Video' && <div>
+            {uploadConfig && !uploadConfig.fileUploadsEnabled && <p className="text-amber-300 mb-3">Document uploads are unavailable until file storage is enabled. You can share an HTTPS video link instead.</p>}
             <label className="block text-gray-300 text-sm font-medium mb-2">Upload File (PDF, PPTX, DOCX; maximum {uploadConfig?.maxFileMB ?? '…'} MB)</label>
             <div className="border-2 border-dashed border-white/20 hover:border-blue-500/50 rounded-xl p-8 text-center transition-all bg-white/5 relative">
                 <input 
@@ -207,6 +209,7 @@ const Upload = () => {
                   onChange={handleFileChange} 
                   className="absolute inset-x-0 inset-y-0 w-full h-full opacity-0 cursor-pointer"
                   accept=".pdf,.docx,.pptx"
+                  disabled={!uploadConfig?.fileUploadsEnabled}
                   required={!(formData.type === 'Video' && formData.videoURL)}
                 />
               <div className="text-gray-400">
@@ -221,7 +224,7 @@ const Upload = () => {
 
           <button 
             type="submit" 
-            disabled={loading || !uploadConfig}
+            disabled={loading || !uploadConfig || (formData.type !== 'Video' && !uploadConfig.fileUploadsEnabled)}
             className="w-full bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-500 hover:to-purple-500 text-white font-bold py-4 px-4 rounded-xl transition-all shadow-[0_0_15px_rgba(59,130,246,0.3)] disabled:opacity-50"
           >
             {loading ? 'Uploading…' : !uploadConfig ? 'Loading upload settings…' : 'Submit Resource'}

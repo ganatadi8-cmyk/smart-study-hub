@@ -148,6 +148,7 @@ const uploadResource = async (req, res) => {
     try { video = new URL(videoURL); } catch { return res.status(400).json({ error: 'Provide a valid HTTPS video URL.' }); }
     if (video.protocol !== 'https:' || video.username || video.password || req.file) return res.status(400).json({ error: 'Videos require an HTTPS link and no file.' });
   } else {
+    if (!process.env.FIREBASE_STORAGE_BUCKET) return res.status(503).json({ error: 'Document uploads are unavailable until file storage is enabled. You can share an HTTPS video link instead.' });
     try {
       const { fileTypeFromBuffer } = await import('file-type');
       detected = req.file && await fileTypeFromBuffer(req.file.buffer);
@@ -182,6 +183,7 @@ const uploadResource = async (req, res) => {
 };
 const downloadResource = async (req, res) => {
   try {
+    if (!process.env.FIREBASE_STORAGE_BUCKET) return res.status(503).json({ error: 'File storage is unavailable.' });
     const snap = await db.collection('resources').doc(req.params.id).get();
     if (!snap.exists || !snap.data().storagePath) return res.status(404).json({ error: 'File not found.' });
     const data = snap.data();
