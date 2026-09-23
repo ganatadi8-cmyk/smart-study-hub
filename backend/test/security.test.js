@@ -19,6 +19,7 @@ const ref = key => ({
   update: async data => records.set(key, { ...records.get(key), ...data })
 });
 const db = {
+  async ready() {},
   collection(name) {
     const filters = [];
     const query = {
@@ -35,7 +36,7 @@ const db = {
     if (transactionUnavailable) return Promise.reject(new Error('database unavailable'));
     const result = queue.then(async () => {
       const writes = [];
-      const value = await callback({ get: reference => reference.get(), set: (...args) => writes.push(args) });
+      const value = await callback({ get: reference => reference.get(), set: (...args) => writes.push(args), update: (reference, data) => writes.push([reference, data, { merge: true }]) });
       for (const [reference, data, options] of writes) await reference.set(data, options);
       return value;
     });
@@ -67,6 +68,8 @@ const fakeConfig = {
 };
 const configPath = require.resolve('../config/firebase-admin');
 require.cache[configPath] = { id: configPath, filename: configPath, loaded: true, exports: fakeConfig };
+const databasePath = require.resolve('../config/database');
+require.cache[databasePath] = { id: databasePath, filename: databasePath, loaded: true, exports: { db } };
 process.env.PUBLIC_API_URL = 'http://localhost:5000/api';
 process.env.FIREBASE_STORAGE_BUCKET = 'test-bucket';
 process.env.AI_REQUESTS_PER_HOUR = '2';

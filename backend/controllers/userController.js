@@ -1,4 +1,5 @@
-const { db, auth } = require('../config/firebase-admin');
+const { auth } = require('../config/firebase-admin');
+const { db } = require('../config/database');
 
 const getAllUsers = async (req, res) => {
   try {
@@ -18,7 +19,7 @@ const getAllUsers = async (req, res) => {
 
     res.status(200).json(users);
   } catch (error) {
-    console.error("Error fetching users:", error);
+    console.error("Unable to load users.");
     res.status(500).json({ error: "Failed to fetch users" });
   }
 };
@@ -44,7 +45,7 @@ const deleteUser = async (req, res) => {
     await docRef.delete();
     res.status(200).json({ message: 'User deleted successfully' });
   } catch (error) {
-    console.error("Error deleting user:", error);
+    console.error("Unable to delete user.");
     res.status(500).json({ error: "Failed to delete user" });
   }
 };
@@ -76,7 +77,7 @@ const getLeaderboard = async (req, res) => {
     
     res.status(200).json(students);
   } catch (error) {
-    console.error("Error fetching leaderboard:", error);
+    console.error("Unable to load leaderboard.");
     res.status(500).json({ error: "Failed to fetch leaderboard" });
   }
 };
@@ -98,7 +99,7 @@ const getUserProfile = async (req, res) => {
     });
     res.json(profile);
   } catch (error) {
-    console.error('Profile synchronization failed:', error);
+    console.error('Profile synchronization failed.');
     res.status(503).json({ error: 'Unable to load your profile. Please try again.' });
   }
 };

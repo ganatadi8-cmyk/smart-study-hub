@@ -1,5 +1,6 @@
 require('dotenv').config();
-const { db } = require('../config/firebase-admin');
+const { db, closeDatabase } = require('../config/database');
+const { errorCode } = require('../db/store');
 // Create-only: never overwrite questions for an existing scored test.
 db.collection('tests').doc('data-structures-v1').create({
   subject: 'Data Structures', branch: 'CSE',
@@ -8,6 +9,6 @@ db.collection('tests').doc('data-structures-v1').create({
     { question: 'What is the search complexity of a balanced binary search tree?', options: ['O(n)', 'O(log n)', 'O(1)'], correctAnswer: 'O(log n)' }
   ]
 }).then(() => console.log('Created data-structures-v1.')).catch(error => {
-  console.error(error.code === 6 ? 'Test already exists. No changes made.' : error.message);
-  if (error.code !== 6) process.exitCode = 1;
-});
+  console.error(errorCode(error) === '23505' ? 'Test already exists. No changes made.' : 'Seeding failed; check the database configuration.');
+  if (errorCode(error) !== '23505') process.exitCode = 1;
+}).finally(closeDatabase);

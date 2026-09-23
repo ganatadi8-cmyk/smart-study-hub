@@ -1,4 +1,5 @@
-const { db } = require('../config/firebase-admin');
+const { randomUUID } = require('node:crypto');
+const { db } = require('../config/database');
 
 // Fetch all discussions
 const getDiscussions = async (req, res) => {
@@ -18,7 +19,7 @@ const getDiscussions = async (req, res) => {
 
     res.status(200).json(discussions);
   } catch (error) {
-    console.error("Error fetching discussions:", error);
+    console.error("Unable to load discussions.");
     res.status(500).json({ error: "Failed to load discussions" });
   }
 };
@@ -28,7 +29,7 @@ const postDiscussion = async (req, res) => {
   try {
     const { question } = req.body;
     
-    if (!question || question.trim() === '') {
+    if (typeof question !== 'string' || !question.trim() || question.length > 5000) {
       return res.status(400).json({ error: "Question cannot be empty" });
     }
 
@@ -42,7 +43,7 @@ const postDiscussion = async (req, res) => {
 
     const newDiscussion = {
       user: userData.name,
-      role: userData.role,
+      role: req.user.role,
       question,
       timestamp: new Date().toISOString(),
       replies: []
@@ -55,7 +56,7 @@ const postDiscussion = async (req, res) => {
       discussion: { id: docRef.id, ...newDiscussion } 
     });
   } catch (error) {
-    console.error("Error posting discussion:", error);
+    console.error("Unable to save discussion.");
     res.status(500).json({ error: "Failed to post discussion" });
   }
 };
@@ -66,7 +67,7 @@ const replyToDiscussion = async (req, res) => {
     const { id } = req.params;
     const { message } = req.body;
 
-    if (!message || message.trim() === '') {
+    if (typeof message !== 'string' || !message.trim() || message.length > 5000) {
       return res.status(400).json({ error: "Reply message cannot be empty" });
     }
 
@@ -85,22 +86,22 @@ const replyToDiscussion = async (req, res) => {
     const userData = userSnap.exists ? userSnap.data() : { name: "Anonymous", role: "Student" };
 
     const newReply = {
-      id: "reply_" + Date.now(),
+      id: randomUUID(),
       user: userData.name,
-      role: userData.role,
+      role: req.user.role,
       message,
       timestamp: new Date().toISOString()
     };
 
-    const discussionData = docSnap.data();
-    const replies = discussionData.replies || [];
-    replies.push(newReply);
-
-    await docRef.update({ replies });
+    await db.runTransaction(async tx => {
+      const latest = await tx.get(docRef);
+      if (!latest.exists) throw Object.assign(new Error('Discussion thread not found.'), { status: 404 });
+      tx.update(docRef, { replies: [...(latest.data().replies || []), newReply] });
+    });
 
     res.status(201).json({ message: "Reply posted successfully", reply: newReply });
   } catch (error) {
-    console.error("Error replying to discussion:", error);
+    console.error("Unable to save reply.");
     res.status(500).json({ error: "Failed to post reply" });
   }
 };
