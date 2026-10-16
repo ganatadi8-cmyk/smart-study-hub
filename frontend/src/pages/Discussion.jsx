@@ -1,5 +1,5 @@
 import { apiUrl } from '../services/api';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion } from 'framer-motion';
 
@@ -10,15 +10,23 @@ const Discussion = () => {
   const [replyText, setReplyText] = useState({});
   const [loading, setLoading] = useState(true);
 
+  const [loadError, setLoadError] = useState('');
+  const [postError, setPostError] = useState('');
+  const [posting, setPosting] = useState(false);
+  const [replying, setReplying] = useState({});
+  const pending = useRef(new Set());
+
   const fetchDiscussions = async () => {
+    setLoadError('');
+    setLoading(true);
     try {
       const response = await fetch(apiUrl('/discussions'));
-      if (response.ok) {
-        const data = await response.json();
-        setDiscussions(data);
-      }
+      if (!response.ok) throw new Error('Unable to load discussions. Please try again.');
+      const data = await response.json();
+      if (!Array.isArray(data)) throw new Error('Unable to load discussions. Please try again.');
+      setDiscussions(data);
     } catch (error) {
-      console.error("Error fetching discussions", error);
+      setLoadError(error.message || 'Unable to load discussions. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -31,10 +39,13 @@ const Discussion = () => {
   const handlePostQuestion = async (e) => {
     e.preventDefault();
     if (!currentUser) {
-      alert("Please login to post questions.");
+      setPostError('Please log in to post questions.');
       return;
     }
-    if (!newQuestion.trim()) return;
+    if (!newQuestion.trim() || pending.current.has('question')) return;
+    pending.current.add('question');
+    setPosting(true);
+    setPostError('');
 
     try {
       const token = await currentUser.getIdToken();
@@ -47,22 +58,28 @@ const Discussion = () => {
         body: JSON.stringify({ question: newQuestion })
       });
 
-      if (response.ok) {
-        setNewQuestion('');
-        fetchDiscussions(); // Refresh threads
-      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Unable to post your question. Please try again.');
+      setNewQuestion('');
+      await fetchDiscussions();
     } catch (error) {
-      console.error("Error posting question:", error);
+      setPostError(error.message || 'Unable to post your question. Please try again.');
+    } finally {
+      pending.current.delete('question');
+      setPosting(false);
     }
   };
 
   const handlePostReply = async (discussionId) => {
     if (!currentUser) {
-      alert("Please login to reply.");
+      setPostError('Please log in to reply.');
       return;
     }
     const message = replyText[discussionId];
-    if (!message?.trim()) return;
+    if (!message?.trim() || pending.current.has(discussionId)) return;
+    pending.current.add(discussionId);
+    setReplying(prev => ({ ...prev, [discussionId]: true }));
+    setPostError('');
 
     try {
       const token = await currentUser.getIdToken();
@@ -75,16 +92,19 @@ const Discussion = () => {
         body: JSON.stringify({ message })
       });
 
-      if (response.ok) {
-        setReplyText(prev => ({ ...prev, [discussionId]: '' }));
-        fetchDiscussions(); // Refresh nested replies
-      }
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Unable to post your reply. Please try again.');
+      setReplyText(prev => ({ ...prev, [discussionId]: '' }));
+      await fetchDiscussions();
     } catch (error) {
-      console.error("Error posting reply:", error);
+      setPostError(error.message || 'Unable to post your reply. Please try again.');
+    } finally {
+      pending.current.delete(discussionId);
+      setReplying(prev => ({ ...prev, [discussionId]: false }));
     }
   };
 
-  if (loading) {
+  if (loading && discussions.length === 0 && !posting && !Object.values(replying).some(Boolean)) {
     return (
       <div className="flex justify-center items-center min-h-[calc(100vh-80px)]">
         <div className="w-12 h-12 border-4 border-purple-500/30 border-t-purple-500 rounded-full animate-spin"></div>
@@ -101,11 +121,22 @@ const Discussion = () => {
         <p className="text-gray-400">Ask questions, share knowledge, and discuss topics with peers and faculty.</p>
       </motion.div>
 
+      {loadError && <div role="alert" className="mb-6 rounded-xl border border-red-400/30 p-4 text-red-300">
+        <p>{loadError}</p>
+        <button type="button" onClick={fetchDiscussions} disabled={loading} className="mt-2 underline">
+          {loading ? 'Retrying…' : 'Retry loading discussions'}
+        </button>
+      </div>}
+      {postError && <p role="alert" className="mb-6 text-red-300">{postError}</p>}
+
       {/* Post new question */}
       <div className="glass p-6 rounded-2xl mb-10 border border-white/10 relative overflow-hidden">
         <div className="absolute top-0 right-0 w-32 h-32 bg-purple-500 rounded-full mix-blend-multiply filter blur-3xl opacity-10"></div>
         <form onSubmit={handlePostQuestion} className="relative z-10">
           <textarea
+            aria-label="Your question"
+            maxLength={5000}
+            disabled={posting}
             value={newQuestion}
             onChange={(e) => setNewQuestion(e.target.value)}
             className="w-full bg-white/5 border border-white/10 rounded-xl p-4 text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 focus:ring-1 focus:ring-purple-500 transition-all custom-scrollbar min-h-[100px]"
@@ -114,10 +145,10 @@ const Discussion = () => {
           <div className="flex justify-end mt-4">
             <button 
               type="submit" 
-              disabled={!newQuestion.trim()}
+              disabled={posting || !currentUser || !newQuestion.trim()}
               className="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:text-gray-500 text-white px-6 py-2 rounded-lg font-medium transition-colors"
             >
-              Post Question
+              {posting ? 'Posting…' : 'Post Question'}
             </button>
           </div>
         </form>
@@ -138,7 +169,7 @@ const Discussion = () => {
               <div className="flex items-center justify-between mb-4">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center text-white font-bold text-lg shadow-lg">
-                    {discussion.user.charAt(0).toUpperCase()}
+                    {(discussion.user || 'Anonymous').charAt(0).toUpperCase()}
                   </div>
                   <div>
                     <h3 className="text-white font-semibold">{discussion.user}</h3>
@@ -185,24 +216,26 @@ const Discussion = () => {
               <div className="flex gap-3 ml-6">
                 <input 
                   type="text"
+                  aria-label="Your reply"
+                  maxLength={5000}
                   value={replyText[discussion.id] || ''}
                   onChange={(e) => setReplyText({ ...replyText, [discussion.id]: e.target.value })}
                   placeholder={currentUser ? "Write a reply..." : "Please login to reply"}
-                  disabled={!currentUser}
+                  disabled={!currentUser || replying[discussion.id]}
                   className="flex-1 bg-white/5 border border-white/10 rounded-lg px-4 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500 transition-colors"
                 />
                 <button 
                   onClick={() => handlePostReply(discussion.id)}
-                  disabled={!replyText[discussion.id]?.trim() || !currentUser}
+                  disabled={replying[discussion.id] || !replyText[discussion.id]?.trim() || !currentUser}
                   className="bg-purple-600 hover:bg-purple-500 disabled:bg-gray-700 disabled:text-gray-500 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors"
                 >
-                  Reply
+                  {replying[discussion.id] ? 'Posting…' : 'Reply'}
                 </button>
               </div>
             </div>
           </motion.div>
         ))}
-        {discussions.length === 0 && (
+        {!loading && !loadError && discussions.length === 0 && (
           <div className="text-center py-20 text-gray-500 glass rounded-2xl">
             No discussions yet. Be the first to start a conversation!
           </div>
