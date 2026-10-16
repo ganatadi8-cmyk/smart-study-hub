@@ -1,13 +1,15 @@
 import React, { useState } from 'react';
 import { FiSearch } from 'react-icons/fi';
 
-const SearchBar = ({ onSearch }) => {
+const SearchBar = ({ onSearch, value, onChange, placeholder = 'Search for notes, PPTs, videos, past papers...' }) => {
   const [searchTerm, setSearchTerm] = useState('');
+
+  const displayedValue = value ?? searchTerm;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (onSearch) {
-      onSearch(searchTerm);
+      onSearch(displayedValue.trim());
     }
   };
 
@@ -17,11 +19,12 @@ const SearchBar = ({ onSearch }) => {
         <FiSearch className="text-gray-400 group-focus-within:text-blue-400 transition-colors text-xl" />
       </div>
       <input
-        type="text"
-        className="block w-full pl-12 pr-4 py-4 bg-white/5 border border-white/10 rounded-2xl text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all shadow-lg backdrop-blur-sm placeholder:text-gray-500"
-        placeholder="Search for notes, PPTs, videos, past papers..."
-        value={searchTerm}
-        onChange={(e) => setSearchTerm(e.target.value)}
+        type="search"
+        aria-label="Search study resources"
+        className="block w-full pl-12 pr-28 py-4 bg-white/5 border border-white/10 rounded-2xl text-gray-100 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-transparent transition-all shadow-lg backdrop-blur-sm placeholder:text-gray-500"
+        placeholder={placeholder}
+        value={displayedValue}
+        onChange={(e) => { setSearchTerm(e.target.value); onChange?.(e.target.value); }}
       />
       <button 
         type="submit" 

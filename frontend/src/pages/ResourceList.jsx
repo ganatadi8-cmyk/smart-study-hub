@@ -1,5 +1,5 @@
 import { apiUrl } from '../services/api';
-import React, { useState, useEffect } from 'react'; // Forced Cache Invalidation
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import ResourceCard from '../components/ResourceCard';
@@ -8,42 +8,48 @@ import SearchBar from '../components/SearchBar';
 const Resources = () => {
   const { branchId, typeId } = useParams();
   const navigate = useNavigate();
-  
+
   const [resources, setResources] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [subjects, setSubjects] = useState([]);
   const [selectedSubject, setSelectedSubject] = useState('All');
   const [searchQuery, setSearchQuery] = useState('');
+  const [reload, setReload] = useState(0);
 
   useEffect(() => {
+    const controller = new AbortController();
     const fetchResources = async () => {
       setLoading(true);
+      setError(null);
+      setSelectedSubject('All');
       try {
         const url = new URL(apiUrl('/resources'));
         url.searchParams.append('branch', branchId.toUpperCase());
         url.searchParams.append('type', typeId);
-        
-        const response = await fetch(url.toString());
+
+        const response = await fetch(url.toString(), { signal: controller.signal });
         if (!response.ok) throw new Error('Network response was not ok');
-        
+
         const fetchedResources = await response.json();
+        if (!Array.isArray(fetchedResources)) throw new Error('Invalid resource response');
         setResources(fetchedResources);
-        
+
         // Extract unique subjects for the filter
         const uniqueSubjects = ['All', ...new Set(fetchedResources.map(r => r.subject).filter(Boolean))];
         setSubjects(uniqueSubjects);
-        
+
         setLoading(false);
       } catch (err) {
-        console.error('Error fetching resources:', err);
+        if (err.name === 'AbortError') return;
         setError('Failed to load resources. Please try again later.');
         setLoading(false);
       }
     };
 
     fetchResources();
-  }, [branchId, typeId]);
+    return () => controller.abort();
+  }, [branchId, typeId, reload]);
 
   const handleSearch = (query) => {
     setSearchQuery(query);
@@ -51,8 +57,8 @@ const Resources = () => {
 
   const filteredResources = resources.filter(res => {
     const matchesSubject = selectedSubject === 'All' || res.subject === selectedSubject;
-    const matchesSearch = res.title?.toLowerCase().includes(searchQuery.toLowerCase()) || 
-                          res.subject?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = res.title?.toLowerCase().includes(searchQuery.trim().toLowerCase()) ||
+                          res.subject?.toLowerCase().includes(searchQuery.trim().toLowerCase());
     return matchesSubject && matchesSearch;
   });
 
@@ -61,8 +67,8 @@ const Resources = () => {
       {/* Header and Navigation */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-8 pb-6 border-b border-gray-800 gap-4">
         <div>
-          <button 
-            onClick={() => navigate(-1)}
+          <button
+            onClick={() => navigate(`/categories/${encodeURIComponent(branchId)}`)}
             className="flex items-center text-gray-400 hover:text-white transition-colors text-sm mb-4 inline-flex"
           >
             <svg className="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -70,7 +76,7 @@ const Resources = () => {
             </svg>
             Back to Categories
           </button>
-          
+
           <div className="flex items-center gap-3 text-sm text-gray-400">
             <span className="bg-blue-500/10 text-blue-400 px-3 py-1 rounded-full border border-blue-500/20">{branchId.toUpperCase()}</span>
             <span>&bull;</span>
@@ -78,9 +84,9 @@ const Resources = () => {
           </div>
           <h1 className="text-3xl font-bold mt-2 text-white">Resource Archive</h1>
         </div>
-        
+
         <div className="w-full md:w-auto">
-          <SearchBar onSearch={handleSearch} placeholder="Search title or subject..." />
+          <SearchBar value={searchQuery} onChange={setSearchQuery} onSearch={handleSearch} placeholder="Search title or subject..." />
         </div>
       </div>
 
@@ -89,8 +95,9 @@ const Resources = () => {
           <div className="animate-spin rounded-full h-10 w-10 border-t-2 border-b-2 border-blue-500"></div>
         </div>
       ) : error ? (
-        <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-6 text-center text-red-400 my-8">
-          {error}
+        <div role="alert" className="bg-red-500/10 border border-red-500/20 rounded-xl p-6 text-center text-red-400 my-8">
+          <p>{error}</p>
+          <button onClick={() => setReload(value => value + 1)} className="mt-3 underline">Retry loading resources</button>
         </div>
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-8">
@@ -103,14 +110,15 @@ const Resources = () => {
                 </svg>
                 Filter by Subject
               </h3>
-              
+
               <div className="space-y-2 max-h-[60vh] overflow-y-auto pr-2 custom-scrollbar">
                 {subjects.map((subject, idx) => (
                   <button
                     key={idx}
+                    aria-pressed={selectedSubject === subject}
                     onClick={() => setSelectedSubject(subject)}
                     className={`w-full text-left px-4 py-2 rounded-lg text-sm transition-all focus:outline-none ${
-                      selectedSubject === subject 
+                      selectedSubject === subject
                         ? 'bg-gradient-to-r from-blue-500/20 to-purple-500/20 border border-blue-500/30 text-white font-medium'
                         : 'text-gray-400 hover:text-white hover:bg-white/5 border border-transparent'
                     }`}
@@ -129,12 +137,12 @@ const Resources = () => {
                 <div className="text-6xl mb-4 opacity-50">📂</div>
                 <h3 className="text-xl font-medium text-white mb-2">No resources found</h3>
                 <p className="text-gray-400 mb-6 max-w-md mx-auto">
-                  {searchQuery || selectedSubject !== 'All' 
+                  {searchQuery || selectedSubject !== 'All'
                     ? "We couldn't find any resources matching your current filters."
                     : "There are currently no resources available in this category for this branch."}
                 </p>
                 {(searchQuery || selectedSubject !== 'All') && (
-                  <button 
+                  <button
                     onClick={() => { setSearchQuery(''); setSelectedSubject('All'); }}
                     className="px-6 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors border border-white/10"
                   >
