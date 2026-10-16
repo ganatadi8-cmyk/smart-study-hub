@@ -1,5 +1,6 @@
 const { MAX_FILE_MB } = require('../middleware/uploads');
-const { db, storage } = require('../config/firebase-admin');
+const { storage } = require('../config/firebase-admin');
+const { db } = require('../config/database');
 
 const getBranches = async (req, res) => {
   try {
@@ -16,7 +17,7 @@ const getBranches = async (req, res) => {
     ];
     res.json(branches);
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 503).json({ error: error.status === 404 ? error.message : 'Unable to complete the resource request.' });
   }
 };
 
@@ -69,7 +70,7 @@ const getResourceById = async (req, res) => {
     
     res.json({ id: doc.id, ...doc.data() });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 503).json({ error: error.status === 404 ? error.message : 'Unable to complete the resource request.' });
   }
 };
 
@@ -98,7 +99,7 @@ const deleteResource = async (req, res) => {
     await docRef.delete();
     res.json({ message: 'Resource deleted successfully' });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 503).json({ error: error.status === 404 ? error.message : 'Unable to complete the resource request.' });
   }
 };
 
@@ -107,30 +108,22 @@ const rateResource = async (req, res) => {
     const { id } = req.params;
     const { rating } = req.body || {};
     
-    if (!rating || rating < 1 || rating > 5) {
-      return res.status(400).json({ error: 'Invalid rating value' });
+    if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+      return res.status(400).json({ error: 'Rating must be an integer from 1 to 5.' });
     }
-
     const docRef = db.collection('resources').doc(id);
-    const docSnap = await docRef.get();
-    
-    if (!docSnap.exists) {
-      return res.status(404).json({ error: 'Resource not found' });
-    }
-
-    const data = docSnap.data();
-    const newCount = (data.ratingCount || 0) + 1;
-    const newTotal = ((data.rating || 0) * (data.ratingCount || 0)) + rating;
-    const newAvg = newTotal / newCount;
-
-    await docRef.update({
-      rating: newAvg,
-      ratingCount: newCount
+    const result = await db.runTransaction(async tx => {
+      const snapshot = await tx.get(docRef);
+      if (!snapshot.exists) throw Object.assign(new Error('Resource not found.'), { status: 404 });
+      const data = snapshot.data();
+      const count = (data.ratingCount || 0) + 1;
+      const average = ((data.rating || 0) * (data.ratingCount || 0) + rating) / count;
+      tx.update(docRef, { rating: average, ratingCount: count });
+      return { rating: average, count };
     });
-
-    res.json({ message: 'Rating updated', rating: newAvg, count: newCount });
+    res.json({ message: 'Rating updated', ...result });
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(error.status || 503).json({ error: error.status === 404 ? error.message : 'Unable to complete the resource request.' });
   }
 };
 
@@ -177,7 +170,7 @@ const uploadResource = async (req, res) => {
     res.status(201).json({ message: 'Resource uploaded.', id: docRef.id, resource });
   } catch (error) {
     if (storedFile) await storedFile.delete({ ignoreNotFound: true }).catch(() => {});
-    console.error('Upload failed:', error.message);
+    console.error('Upload failed.');
     res.status(503).json({ error: 'Unable to save the resource. Please try again.' });
   }
 };

@@ -1,77 +1,89 @@
-# Deploy the frontend and backend on Vercel
+# Publish Smart Study Hub with Neon
 
-This repository is deployment-ready but does not contain a Vercel account connection or live Firebase credentials. Deployment URLs only exist after successful deployments; no example hostname below is a live link.
+The code supports a public website/API on Vercel and application data in Neon PostgreSQL. A successful build is not a deployment. Real hosting access, database URLs and Firebase credentials must be configured before the app can go live.
 
-## Hosting layout
+## 1. Create the Neon database
 
-| Component | Provider | Vercel root directory |
+In [Neon Console](https://console.neon.tech/), create a dedicated `smart-study-hub` project/database or an isolated database/branch. Do not replace the existing diary database. Choose a region near the Vercel API region. Copy the pooled and direct connection strings from **Connect**.
+
+| Setting | Used for | Where to save it |
 | --- | --- | --- |
-| Website | Vercel (Vite) | `frontend` |
-| API | Vercel (Express) | `backend` |
-| Database | Cloud Firestore in your Firebase project | Not hosted in Vercel |
-| Login | Firebase Authentication | Not hosted in Vercel |
-| Uploaded documents | Firebase Storage | Not hosted in Vercel |
+| `DATABASE_URL` | Normal API queries; pooled hostname | Backend Vercel sensitive environment variable and local backend `.env` |
+| `DATABASE_URL_UNPOOLED` | Drizzle schema migrations; direct hostname | Trusted operator machine / private migration job |
 
-Create two Vercel projects linked to this repository. Deploy the reviewed `improve/security-and-setup` branch, or merge the reviewed PR before deploying `main`. Set Node.js 24.x in both projects. Each directory includes its own `vercel.json`. Do not deploy the repository root as a Vite project.
+The URLs contain passwords. Do not place them in frontend settings, GitHub, screenshots, or public links. The normal API uses `pg` with a small reusable pool and Vercel's pool lifecycle helper. All remote database connections enforce verified TLS.
 
-## 1. Firebase
+On a trusted machine, from `backend/`:
 
-Use an existing project or create one in [Firebase Console](https://console.firebase.google.com/). Enable Email/Password Authentication, create Firestore, and provision a Storage bucket. Register a web app and keep its public configuration. Follow the root README to deploy the default-deny database/storage rules. The project owner must configure any required billing.
+```sh
+npm ci
+npm run db:migrate
+```
 
-Obtain the backend service-account JSON through your project's service account settings. Add the complete JSON directly to **the backend Vercel project's sensitive environment variables**, not a chat message, frontend setting, or repository file. Use a service account authorized to manage Auth and access this project's Firestore and Storage. The backend rejects a project-ID mismatch.
+The command uses `DATABASE_URL_UNPOOLED` from `backend/.env`. The committed Drizzle migration creates six `study_*` tables and indexes. It does not drop or alter old Firestore data. New schema changes should be generated with `npm run db:generate`, reviewed and tested on a Neon development branch before applying to production. Never run production migrations implicitly in `npm run build`.
 
-## 2. API project
+## 2. Import existing Firestore records, if any
 
-Import the repo with root directory `backend` and Express framework. Choose the intended production branch. Use these production environment variables:
+Firebase login accounts and optional stored files remain in their current services. Only Firestore application records move.
+
+1. Back up the old records and pause writes on the old application. Keep it paused until the database cutover is verified.
+2. Configure backend Firebase Admin credentials for the same Firebase project and the target Neon `DATABASE_URL`. Give the import operator read access to Firestore.
+3. Run `npm run db:import-firestore` for a dry run. It checks all six source collections and prints counts, not document contents.
+4. Set `FIRESTORE_WRITES_PAUSED=true` and run `npm run db:import-firestore -- --apply`.
+5. The import retains record IDs, test attempts, scores, replies, file references and rate counters. It can be resumed: identical existing records are skipped; differing records stop the process for manual resolution. It never overwrites or deletes source records.
+6. Compare source/import counts and sample records. Only then point the website at the Neon-backed API and reopen writes. Do not delete the old Firestore data yet. After accepting writes in Neon, do not revert to the stale Firestore API without a reconciliation plan.
+
+Skip this section if there are no source records. Run `npm run seed` to create the optional sample test; it does not overwrite an existing test.
+
+## 3. Deploy the API on Vercel
+
+Import `ganatadi8-cmyk/smart-study-hub` as a project with **Root Directory `backend`**, Express framework, Node 24. Deploy the branch containing the Neon migration until it is merged to `main`. Set production environment variables:
 
 | Variable | Value |
 | --- | --- |
 | `NODE_ENV` | `production` |
-| `FIREBASE_PROJECT_ID` | Actual Firebase project ID |
-| `FIREBASE_STORAGE_BUCKET` | Optional; set to the actual bucket name only after Storage is provisioned. Without it, document uploads are disabled and HTTPS video links still work. |
-| `FIREBASE_SERVICE_ACCOUNT_JSON` | Complete service-account JSON; sensitive |
-| `PUBLIC_API_URL` | Actual stable backend URL plus `/api` |
+| `DATABASE_URL` | Sensitive, pooled Neon URL |
+| `FIREBASE_PROJECT_ID` | `studyhub-16fdf-53e36` |
+| `FIREBASE_SERVICE_ACCOUNT_JSON` | Sensitive, complete Admin service-account JSON matching the project |
+| `PUBLIC_API_URL` | Actual stable API origin plus `/api` |
 | `CORS_ORIGINS` | Actual stable website origin, no trailing slash |
 | `USE_FIREBASE_EMULATORS` | `false` |
-| `OPENAI_API_KEY` | Optional sensitive key; AI is unavailable without it |
-| `OPENAI_MODEL` | `gpt-4o-mini` or another compatible configured model |
+| `FIREBASE_STORAGE_BUCKET` | Optional actual bucket name; enables document uploads |
+| `OPENAI_API_KEY` | Optional sensitive key; enables AI |
+| `OPENAI_MODEL` | `gpt-4o-mini` or another compatible model |
 | `AI_REQUESTS_PER_HOUR` | `20` |
 | `AI_GLOBAL_REQUESTS_PER_HOUR` | `200` |
 
-Use the actual project domains assigned by Vercel for `PUBLIC_API_URL` and `CORS_ORIGINS`, then redeploy if these were added after the first deployment. Remove all emulator host variables and do not set `GOOGLE_APPLICATION_CREDENTIALS` to a path on your laptop: that path does not exist inside Vercel.
+Set secrets directly in Vercel's backend environment settings. Do not paste keys into chat or upload a service-account file to GitHub. Normal Auth/Storage credentials no longer require Firestore access. Remove all emulator host variables in production. No persistent local upload disk is used.
 
-The API exports its Express application from `server.js`. It does not rely on a writable disk or a permanent listening process on Vercel. Firebase clients initialize once per function instance. Vercel automatically sets `VERCEL=1`; uploads are capped at **4 MiB** there, leaving room for multipart metadata below the platform's 4.5 MB payload limit. Elsewhere the existing 10 MiB limit remains. `/api/resources/upload-config` tells the frontend the active limit. Old larger documents require a direct-storage download flow or another backend host before migration to Vercel.
+Use stable project domains for API URLs and CORS. If those settings change after the first deployment, redeploy. Configure this app's production API to be reachable by the public website; Firebase tokens continue to protect restricted actions. Leave preview deployments protected unless deliberately testing a public preview.
 
-## 3. Website project
+## 4. Deploy the website on Vercel
 
-Import the same repo again with root directory `frontend` and Vite framework. The build and output settings are already in `frontend/vercel.json`. Set:
+Import the same repository as a second project with **Root Directory `frontend`**, Vite, Node 24. The committed `frontend/vercel.json` includes build/output settings and SPA fallback.
 
 | Variable | Value |
 | --- | --- |
-| `VITE_API_URL` | Actual stable backend URL plus `/api` |
-| `VITE_FIREBASE_API_KEY` | Firebase web app API key |
+| `VITE_API_URL` | Actual stable API origin plus `/api` |
+| `VITE_FIREBASE_API_KEY` | Firebase web app API key (public web configuration) |
 | `VITE_FIREBASE_AUTH_DOMAIN` | Firebase web app auth domain |
-| `VITE_FIREBASE_PROJECT_ID` | Same Firebase project ID as the backend |
+| `VITE_FIREBASE_PROJECT_ID` | `studyhub-16fdf-53e36` |
 | `VITE_FIREBASE_APP_ID` | Firebase web app ID |
 | `VITE_USE_FIREBASE_EMULATORS` | `false` |
 
-Add the final website hostname to Firebase Authentication's authorized domains. Rebuild after changing any `VITE_*` variable. The SPA rewrite allows direct visits to `/login`, `/dashboard`, etc. If the backend has Vercel Deployment Protection enabled, configure it so the intended public website can call the API; Firebase authentication still protects private actions. Do not disable protection on unrelated projects.
+Add the final website hostname to Firebase Authentication authorized domains. Rebuild after changing a `VITE_*` variable. Never add database URLs or Admin credentials to this project. Make the website's production deployment public if needed; this does not mean making Neon publicly writable.
 
-## 4. Verify and collect real links
+## 5. Verify before sharing
 
-1. Open the website and directly reload `/login`.
-2. Open the backend root: it should identify Smart Study Hub API.
-3. Open backend `/api/health`: expect 200 and `status: ok`.
-4. Open backend `/api/ready`: expect 200 and `status: ready` (proves a Firestore read succeeded).
-5. Sign up, send/complete email verification, then reload the page. The saved profile should remain.
-6. Assign Faculty via the trusted role script, sign out and back in, and upload/download/delete a small PDF.
-7. Seed a test, submit it as a student and retry. Points must be awarded once.
-8. If configured, send an AI question from a verified account.
+- Public website and direct reload of `/login` work in a signed-out browser.
+- API `/api/health` returns 200. `/api/ready` returns `{"status":"ready","database":"postgresql"}`; this checks all six migrated tables.
+- Signup, email verification, login and profile reload succeed; `study_users` shows the saved profile in Neon.
+- Browse resources, post/reload a discussion, submit/retry a seeded test. Points are awarded once.
+- Assign Faculty with the operator script, sign out/back in, and share a video link. If Storage is configured, verify PDF upload/download/delete.
+- If enabled, AI requires verified login and applies shared database quotas.
 
-Return the actual website URL, backend root, backend `/api/health`, backend `/api/ready`, and the project's Firebase Console links for Firestore, Authentication and Storage. Firebase Console links require the owner's Google login; they are not public database endpoints. Do not report deployment success until the appropriate checks succeed.
+Give users the verified website URL. Give the owner the private Neon project dashboard URL for inspecting the tables. A PostgreSQL connection string is an application credential, not a web page or public database browser.
 
-## Reference
+## Local checks
 
-- [Vercel Express deployment](https://vercel.com/docs/frameworks/backend/express)
-- [Vite on Vercel](https://vercel.com/docs/frameworks/frontend/vite)
-- [Vercel function payload limits](https://vercel.com/docs/functions/limitations)
+`npm test` in `backend` and `npm run lint && npm run build` in `frontend`. To run SQL integration tests locally, set `TEST_DATABASE_URL` to a disposable local PostgreSQL database. CI provisions PostgreSQL 17 automatically. Fake Auth/Storage tests and local PostgreSQL checks do not validate hosted IAM, Firebase email delivery, or live Neon/Vercel access.

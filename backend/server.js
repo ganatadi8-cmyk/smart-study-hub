@@ -1,7 +1,7 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { db } = require('./config/firebase-admin');
+const { db } = require('./config/database');
 const { MAX_FILE_MB } = require('./middleware/uploads');
 const app = express();
 const origins = (process.env.CORS_ORIGINS || 'http://localhost:5173').split(',').map(value => value.trim());
@@ -13,7 +13,7 @@ app.use((req, res, next) => { res.set('X-Content-Type-Options', 'nosniff'); next
 app.get('/', (req, res) => res.json({ service: 'Smart Study Hub API', health: '/api/health', databaseReadiness: '/api/ready' }));
 app.get('/api/health', (req, res) => res.json({ status: 'ok' }));
 app.get('/api/ready', async (req, res) => {
-  try { await db.collection('health').doc('readiness').get(); res.json({ status: 'ready' }); }
+  try { await db.ready(); res.json({ status: 'ready', database: 'postgresql' }); }
   catch { res.status(503).json({ status: 'unavailable' }); }
 });
 app.use('/api/resources', require('./routes/resources'));

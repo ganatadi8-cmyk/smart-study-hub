@@ -30,3 +30,7 @@ firebase-adminsdk*.json
 service-account*.json
 
 .vercel/
+
+# Database/provider credentials and local snapshots
+.neon
+*.dump

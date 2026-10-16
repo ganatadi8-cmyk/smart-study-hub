@@ -1,5 +1,5 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
 
 import Navbar from './components/Navbar';
@@ -84,6 +84,12 @@ function App() {
                   <FacultyDashboard />
                 </ProtectedRoute>
               } />
+              <Route path="*" element={<section className="max-w-2xl mx-auto px-6 py-24 text-center">
+                <p className="text-blue-400 font-semibold">404</p>
+                <h1 className="text-3xl font-bold my-4">Page not found</h1>
+                <p className="text-gray-400 mb-8">This page may have moved. Continue exploring the study library.</p>
+                <Link to="/library" className="bg-blue-600 px-6 py-3 rounded-xl">Browse library</Link>
+              </section>} />
             </Routes>
           </main>
           <AiChatWidget />

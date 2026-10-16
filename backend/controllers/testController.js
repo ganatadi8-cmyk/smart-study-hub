@@ -1,4 +1,4 @@
-const { db } = require('../config/firebase-admin');
+const { db } = require('../config/database');
 const { createHash } = require('node:crypto');
 const getTests = async (req, res) => {
   try {

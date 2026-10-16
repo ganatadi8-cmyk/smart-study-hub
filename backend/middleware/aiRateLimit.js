@@ -1,6 +1,6 @@
-const { db } = require('../config/firebase-admin');
+const { db } = require('../config/database');
 const { createHash } = require('node:crypto');
-// Shared Firestore counters work across restarts and multiple API instances.
+// Shared Neon PostgreSQL counters work across restarts and multiple API instances.
 const aiRateLimit = async (req, res, next) => {
   const windowMs = 60 * 60 * 1000;
   const window = Math.floor(Date.now() / windowMs);

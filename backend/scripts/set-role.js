@@ -1,5 +1,6 @@
 require('dotenv').config();
-const { auth, db } = require('../config/firebase-admin');
+const { auth } = require('../config/firebase-admin');
+const { db, closeDatabase } = require('../config/database');
 const [uid, role] = process.argv.slice(2);
 if (!uid || !['Student', 'Faculty', 'Admin'].includes(role)) {
   console.error('Usage: npm run set-role -- <firebase-uid> Student|Faculty|Admin');
@@ -11,5 +12,5 @@ if (!uid || !['Student', 'Faculty', 'Admin'].includes(role)) {
     await auth.revokeRefreshTokens(uid);
     await db.collection('users').doc(uid).set({ role }, { merge: true });
     console.log('Role updated. The user must sign out and sign in again.');
-  })().catch(error => { console.error(error.message); process.exitCode = 1; });
+  })().catch(error => { console.error('Role update failed. Check database and Firebase permissions.'); process.exitCode = 1; }).finally(closeDatabase);
 }
